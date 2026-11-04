@@ -1,4 +1,5 @@
 import time
+import json
 import requests
 import subprocess
 from rich.console import Console
@@ -7,13 +8,16 @@ from rich.panel import Panel
 
 console = Console()
 
-# --- KONFIGURASI DAFTAR ITEM ---
-# Kamu bisa menambahkan berapa pun item dan target harganya di sini!
-WATCH_LIST = [
-    {"name": "Dreams & Nightmares Case", "target": 12000},
-    {"name": "Recoil Case", "target": 4000},
-    {"name": "Fracture Case", "target": 3500},
-]
+# --- KONFIGURASI MEMBACA FILE JSON ---
+try:
+    with open("items.json", "r", encoding="utf-8") as file:
+        WATCH_LIST = json.load(file)
+except FileNotFoundError:
+    console.print("[red][!] File items.json tidak ditemukan! Gagal memulai tracker.[/red]")
+    exit()
+
+CHECK_INTERVAL = 60  
+# ... (sisa kodemu di bawahnya tidak perlu ada yang diubah, biarkan seperti semula)
 
 # Jeda waktu antar pengecekan seluruh item (dalam detik). 
 # Diubah jadi 60 detik atau lebih agar sangat aman dari limit Steam.
