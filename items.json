@@ -1,14 +1,9 @@
-[
-    {
-        "name": "Dreams & Nightmares Case",
-        "target": 12000
-    },
-    {
-        "name": "Recoil Case",
-        "target": 4000
-    },
-    {
-        "name": "Fracture Case",
-        "target": 3500
-    }
-]
+{
+    "cases": [
+        {"name": "Dreams & Nightmares Case", "target": 12000},
+        {"name": "Recoil Case", "target": 4000}
+    ],
+    "stickers": [
+        {"name": "Sticker | Titan | Katowice 2014", "target": 50000}
+    ]
+}

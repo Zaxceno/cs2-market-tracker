@@ -1,32 +1,52 @@
+import random
 import time
 import json
 import requests
-import subprocess
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 
+# Notifikasi desktop lintas platform (Windows & Linux)
+try:
+    from plyer import notification
+except ImportError:
+    notification = None
+
 console = Console()
 
-# --- KONFIGURASI MEMBACA FILE JSON ---
+# --- KONFIGURASI MEMBACA FILE JSON (Roadmap 1 & 2 Support) ---
 try:
     with open("items.json", "r", encoding="utf-8") as file:
-        WATCH_LIST = json.load(file)
+        raw_data = json.load(file)
+        
+        WATCH_LIST = []
+        # Jika JSON menggunakan struktur kategori {"cases": [...], "stickers": [...]}
+        if isinstance(raw_data, dict):
+            for category_name, items in raw_data.items():
+                for item in items:
+                    item_entry = item.copy()
+                    item_entry["category"] = category_name.upper()
+                    WATCH_LIST.append(item_entry)
+        # Jika JSON menggunakan struktur list biasa [{"name": "..."}, ...]
+        elif isinstance(raw_data, list):
+            for item in raw_data:
+                item_entry = item.copy()
+                item_entry["category"] = "GENERAL"
+                WATCH_LIST.append(item_entry)
+
 except FileNotFoundError:
     console.print("[red][!] File items.json tidak ditemukan! Gagal memulai tracker.[/red]")
     exit()
+except json.JSONDecodeError:
+    console.print("[red][!] Format items.json rusak atau tidak valid![/red]")
+    exit()
 
-CHECK_INTERVAL = 60  
-# ... (sisa kodemu di bawahnya tidak perlu ada yang diubah, biarkan seperti semula)
-
-# Jeda waktu antar pengecekan seluruh item (dalam detik). 
-# Diubah jadi 60 detik atau lebih agar sangat aman dari limit Steam.
 CHECK_INTERVAL = 60  
 
 def get_cs2_price(item_name):
     url = f"https://steamcommunity.com/market/priceoverview/?appid=730&currency=39&market_hash_name={item_name}"
     headers = {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
     try:
         response = requests.get(url, headers=headers, timeout=10)
@@ -40,21 +60,29 @@ def get_cs2_price(item_name):
         return None
     return None
 
-def send_gnome_notification(title, message):
-    subprocess.run(["notify-send", "-a", "CS2 Tracker", "-u", "normal", title, message])
+def send_desktop_notification(title, message):
+    if notification:
+        try:
+            notification.notify(
+                title=title,
+                message=message,
+                app_name="CS2 Tracker",
+                timeout=5
+            )
+        except Exception:
+            pass
 
 def main():
     console.print(Panel.fit("[bold green]CS2 Multi-Item Live Market Tracker Started[/bold green]", border_style="green"))
     console.print(f"[dim]Memantau {len(WATCH_LIST)} item sekaligus. (Tekan Ctrl+C untuk berhenti)[/dim]\n")
     
-    # Dictionary untuk mencatat status notifikasi masing-masing item agar tidak spam
     notified_status = {item["name"]: False for item in WATCH_LIST}
 
     try:
         while True:
-            # Membuat tabel TUI untuk menampung banyak item sekaligus
             table = Table(show_header=True, header_style="bold cyan")
             table.add_column("No", style="dim", width=4)
+            table.add_column("Kategori", style="bold magenta")
             table.add_column("Item Market")
             table.add_column("Harga Saat Ini")
             table.add_column("Target Jual")
@@ -65,12 +93,13 @@ def main():
             for idx, target_item in enumerate(WATCH_LIST, 1):
                 item_name = target_item["name"]
                 target_price = target_item["target"]
+                category_name = target_item.get("category", "GENERAL")
 
                 raw_price = get_cs2_price(item_name)
 
                 if raw_price == "LIMITED":
                     is_limited = True
-                    table.add_row(str(idx), item_name, "[yellow]LIMITED (429)[/yellow]", f"Rp {target_price:,}", "[yellow]Menunggu Reset...[/yellow]")
+                    table.add_row(str(idx), category_name, item_name, "[yellow]LIMITED (429)[/yellow]", f"Rp {target_price:,}", "[yellow]Menunggu Reset...[/yellow]")
                     continue
                 elif raw_price:
                     clean_str = raw_price.replace("Rp", "").replace(".", "").strip()
@@ -80,20 +109,20 @@ def main():
                         status_str = "[green]Target Tercapai![/green]"
                         if not notified_status[item_name]:
                             msg = f"{item_name} menembus Rp {current_price:,}!"
-                            send_gnome_notification("📈 Target Harga CS2 Tercapai!", msg)
+                            send_desktop_notification("📈 Target Harga CS2 Tercapai!", msg)
                             notified_status[item_name] = True
                     else:
                         status_str = "[yellow]Hold / Belum Capai[/yellow]"
                         notified_status[item_name] = False
 
-                    table.add_row(str(idx), item_name, f"Rp {current_price:,}", f"Rp {target_price:,}", status_str)
+                    table.add_row(str(idx), category_name, item_name, f"Rp {current_price:,}", f"Rp {target_price:,}", status_str)
                 else:
-                    table.add_row(str(idx), item_name, "[red]Gagal Fetch[/red]", f"Rp {target_price:,}", "[red]Error Koneksi[/red]")
+                    table.add_row(str(idx), category_name, item_name, "[red]Gagal Fetch[/red]", f"Rp {target_price:,}", "[red]Error Koneksi[/red]")
 
-                # Jeda kecil 2-3 detik ANTAR ITEM agar Steam tidak memblokir IP-mu
-                time.sleep(2)
+                # Jeda acak 3–7 detik antar item (Roadmap 3)
+                waktu_jeda = random.randint(3, 7)
+                time.sleep(waktu_jeda)
 
-            # Bersihkan terminal dan cetak tabel rangkumannya secara rapi
             console.clear()
             console.print(Panel.fit("[bold green]CS2 Multi-Item Live Market Tracker[/bold green]", border_style="green"))
             console.print(table)
